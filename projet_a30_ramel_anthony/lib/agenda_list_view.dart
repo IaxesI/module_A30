@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'login_screen.dart';
 import 'auth_service.dart';
+import 'agenda_service.dart';
 
 class AgendaListView extends StatefulWidget {
   final String username;
@@ -27,15 +29,72 @@ class _AgendaListViewState extends State<AgendaListView> {
 
   final List<AgendaItem> _agendaItems = [];
 
+  final AgendaService _agendaService = AgendaService();
+
   @override
-  void initState() {
-    super.initState();
-    initializeDateFormatting('fr_FR', null);
-    _username = widget.username;
-    _generateDemoData();
+void initState() {
+  super.initState();
+  initializeDateFormatting('fr_FR', null);
+  _username = widget.username;
+  fetchAgendaItems();
+}
+
+  Future<void> fetchAgendaItems() async {
+  try {
+    final data = await _agendaService.read(_username);
+    final decoded = jsonDecode(data);
+
+    if (decoded['utilisateur'] != _username) {
+      throw Exception('Données utilisateur non trouvées.');
+    }
+
+    final events = decoded['evenements'] as List<dynamic>;
+
+    final agendaItems = events.map((event) {
+      final dateParts = event['date'].split('/');
+      final date = DateTime(
+        int.parse(dateParts[2]),
+        int.parse(dateParts[1]),
+        int.parse(dateParts[0]),
+      );
+
+      final startTimeParts = event['startTime'].split(':');
+      final endTimeParts = event['endTime'].split(':');
+
+      return AgendaItem(
+        title: event['title'],
+        description: event['description'],
+        date: date,
+        startTime: TimeOfDay(
+          hour: int.parse(startTimeParts[0]),
+          minute: int.parse(startTimeParts[1]),
+        ),
+        endTime: TimeOfDay(
+          hour: int.parse(endTimeParts[0]),
+          minute: int.parse(endTimeParts[1]),
+        ),
+        color: _getRandomColor(_agendaItems.length),
+      );
+    }).toList();
+
+    setState(() {
+      _agendaItems.clear();
+      _agendaItems.addAll(agendaItems);
+      _agendaItems.sort((a, b) => a.date.compareTo(b.date));
+    });
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Erreur chargement : $e')),
+    );
+  }
+}
+
+  TimeOfDay _parseTime(String time) {
+    final parts = time.split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
 
-  void _generateDemoData() {
+  /**void _generateDemoData() {
     final now = DateTime.now();
     for (int i = 0; i < 14; i++) {
       final date = now.add(Duration(days: i));
@@ -56,7 +115,7 @@ class _AgendaListViewState extends State<AgendaListView> {
     }
 
     _agendaItems.sort((a, b) => a.date.compareTo(b.date));
-  }
+  }**/
 
   Color _getRandomColor(int seed) {
     final colors = [
