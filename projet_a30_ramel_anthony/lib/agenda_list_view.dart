@@ -464,57 +464,65 @@ class _AgendaListViewState extends State<AgendaListView> {
             ),
           ],
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.more_vert),
-          onPressed: () async {
-            final shouldDelete = await showDialog<bool>(
-              context: context,
-              builder: (context) {
-                return AlertDialog(
-                  title: const Text('Supprimer l\'événement ?'),
-                  content: Text(
-                    'Voulez-vous vraiment supprimer "${event.title}" ?',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Annuler'),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) async {
+            if (value == 'edit') {
+              _showEditEventDialog(event);
+            } else if (value == 'delete') {
+              final shouldDelete = await showDialog<bool>(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('Supprimer l\'événement ?'),
+                    content: Text(
+                      'Voulez-vous vraiment supprimer "${event.title}" ?',
                     ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Supprimer'),
-                    ),
-                  ],
-                );
-              },
-            );
-
-            if (shouldDelete == true) {
-              final eventToDelete = {
-                'title': event.title,
-                'description': event.description,
-                'date':
-                    "${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}/${event.date.year}",
-                'startTime': _formatTimeOfDay(event.startTime),
-                'endTime': _formatTimeOfDay(event.endTime),
-              };
-
-              final result = await _agendaService.delete(
-                _username,
-                eventToDelete,
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Annuler'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Supprimer'),
+                      ),
+                    ],
+                  );
+                },
               );
 
-              if (result == 'OK') {
-                setState(() {
-                  _agendaItems.remove(event);
-                });
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Erreur suppression : $result')),
+              if (shouldDelete == true) {
+                final eventToDelete = {
+                  'title': event.title,
+                  'description': event.description,
+                  'date':
+                      "${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}/${event.date.year}",
+                  'startTime': _formatTimeOfDay(event.startTime),
+                  'endTime': _formatTimeOfDay(event.endTime),
+                };
+
+                final result = await _agendaService.delete(
+                  _username,
+                  eventToDelete,
                 );
+
+                if (result == 'OK') {
+                  setState(() {
+                    _agendaItems.remove(event);
+                  });
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erreur suppression : $result')),
+                  );
+                }
               }
             }
           },
+          itemBuilder:
+              (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('Modifier')),
+                const PopupMenuItem(value: 'delete', child: Text('Supprimer')),
+              ],
         ),
       ),
     );
