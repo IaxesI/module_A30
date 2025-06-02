@@ -32,90 +32,63 @@ class _AgendaListViewState extends State<AgendaListView> {
   final AgendaService _agendaService = AgendaService();
 
   @override
-void initState() {
-  super.initState();
-  initializeDateFormatting('fr_FR', null);
-  _username = widget.username;
-  fetchAgendaItems();
-}
+  void initState() {
+    super.initState();
+    initializeDateFormatting('fr_FR', null);
+    _username = widget.username;
+    fetchAgendaItems();
+  }
 
   Future<void> fetchAgendaItems() async {
-  try {
-    final data = await _agendaService.read(_username);
-    final decoded = jsonDecode(data);
+    try {
+      final data = await _agendaService.read(_username);
 
-    if (decoded['utilisateur'] != _username) {
-      throw Exception('Données utilisateur non trouvées.');
+      final agendaItems =
+          data.map((event) {
+            final dateParts = event['date'].split('/');
+            final date = DateTime(
+              int.parse(dateParts[2]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[0]),
+            );
+
+            final startTimeParts = event['startTime'].split(':');
+            final endTimeParts = event['endTime'].split(':');
+
+            return AgendaItem(
+              title: event['title'],
+              description: event['description'],
+              date: date,
+              startTime: TimeOfDay(
+                hour: int.parse(startTimeParts[0]),
+                minute: int.parse(startTimeParts[1]),
+              ),
+              endTime: TimeOfDay(
+                hour: int.parse(endTimeParts[0]),
+                minute: int.parse(endTimeParts[1]),
+              ),
+              color: _getRandomColor(_agendaItems.length),
+            );
+          }).toList();
+
+      setState(() {
+        _agendaItems.clear();
+        _agendaItems.addAll(agendaItems);
+        _agendaItems.sort((a, b) => a.date.compareTo(b.date));
+      });
+    } catch (e) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur chargement : $e')));
+      });
     }
-
-    final events = decoded['evenements'] as List<dynamic>;
-
-    final agendaItems = events.map((event) {
-      final dateParts = event['date'].split('/');
-      final date = DateTime(
-        int.parse(dateParts[2]),
-        int.parse(dateParts[1]),
-        int.parse(dateParts[0]),
-      );
-
-      final startTimeParts = event['startTime'].split(':');
-      final endTimeParts = event['endTime'].split(':');
-
-      return AgendaItem(
-        title: event['title'],
-        description: event['description'],
-        date: date,
-        startTime: TimeOfDay(
-          hour: int.parse(startTimeParts[0]),
-          minute: int.parse(startTimeParts[1]),
-        ),
-        endTime: TimeOfDay(
-          hour: int.parse(endTimeParts[0]),
-          minute: int.parse(endTimeParts[1]),
-        ),
-        color: _getRandomColor(_agendaItems.length),
-      );
-    }).toList();
-
-    setState(() {
-      _agendaItems.clear();
-      _agendaItems.addAll(agendaItems);
-      _agendaItems.sort((a, b) => a.date.compareTo(b.date));
-    });
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erreur chargement : $e')),
-    );
   }
-}
 
   TimeOfDay _parseTime(String time) {
     final parts = time.split(':');
     return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
-
-  /**void _generateDemoData() {
-    final now = DateTime.now();
-    for (int i = 0; i < 14; i++) {
-      final date = now.add(Duration(days: i));
-      final eventCount = i % 3 + 1;
-      for (int j = 0; j < eventCount; j++) {
-        final startHour = 8 + (j * 2);
-        _agendaItems.add(
-          AgendaItem(
-            title: 'Événement ${j + 1}',
-            description: 'Description de l\'événement ${j + 1}',
-            date: date,
-            startTime: TimeOfDay(hour: startHour, minute: 0),
-            endTime: TimeOfDay(hour: startHour + 1, minute: 30),
-            color: _getRandomColor(j),
-          ),
-        );
-      }
-    }
-
-    _agendaItems.sort((a, b) => a.date.compareTo(b.date));
-  }**/
 
   Color _getRandomColor(int seed) {
     final colors = [
@@ -219,6 +192,12 @@ void initState() {
     showDialog(
       context: context,
       builder: (context) {
+        String formatTimeOfDay(TimeOfDay tod) {
+          final h = tod.hour.toString().padLeft(2, '0');
+          final m = tod.minute.toString().padLeft(2, '0');
+          return '$h:$m';
+        }
+
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
@@ -261,7 +240,7 @@ void initState() {
                     ),
                     ListTile(
                       title: const Text('Heure de début'),
-                      subtitle: Text(_selectedStartTime.format(context)),
+                      subtitle: Text(formatTimeOfDay(_selectedStartTime)),
                       onTap: () async {
                         final picked = await showTimePicker(
                           context: context,
@@ -276,14 +255,17 @@ void initState() {
                     ),
                     ListTile(
                       title: const Text('Heure de fin'),
-                      subtitle: Text(_selectedEndTime.format(context)),
+                      subtitle: Text(formatTimeOfDay(_selectedEndTime)),
                       onTap: () async {
                         final picked = await showTimePicker(
                           context: context,
                           initialTime: _selectedEndTime,
                         );
                         if (picked != null &&
-                            picked.hour > _selectedStartTime.hour) {
+                            (picked.hour > _selectedStartTime.hour ||
+                                (picked.hour == _selectedStartTime.hour &&
+                                    picked.minute >
+                                        _selectedStartTime.minute))) {
                           setStateDialog(() {
                             _selectedEndTime = picked;
                           });
@@ -300,22 +282,45 @@ void initState() {
                 ),
                 ElevatedButton(
                   child: const Text('Ajouter'),
-                  onPressed: () {
-                    if (_titleController.text.isNotEmpty) {
-                      setState(() {
-                        _agendaItems.add(
-                          AgendaItem(
-                            title: _titleController.text,
-                            description: _descController.text,
-                            date: _selectedDate,
-                            startTime: _selectedStartTime,
-                            endTime: _selectedEndTime,
-                            color: _getRandomColor(_agendaItems.length),
-                          ),
+                  onPressed: () async {
+                    if (_titleController.text.isNotEmpty &&
+                        (_selectedStartTime.hour < _selectedEndTime.hour ||
+                            (_selectedStartTime.hour == _selectedEndTime.hour &&
+                                _selectedStartTime.minute <
+                                    _selectedEndTime.minute))) {
+                      final newEvent = {
+                        'title': _titleController.text,
+                        'description': _descController.text,
+                        'date': DateFormat('dd/MM/yyyy').format(_selectedDate),
+                        'startTime': formatTimeOfDay(_selectedStartTime),
+                        'endTime': formatTimeOfDay(_selectedEndTime),
+                      };
+
+                      final result = await _agendaService.addEvent(
+                        'RamelA',
+                        newEvent,
+                      );
+
+                      if (result == 'OK') {
+                        setState(() {
+                          _agendaItems.add(
+                            AgendaItem(
+                              title: _titleController.text,
+                              description: _descController.text,
+                              date: _selectedDate,
+                              startTime: _selectedStartTime,
+                              endTime: _selectedEndTime,
+                              color: _getRandomColor(_agendaItems.length),
+                            ),
+                          );
+                          _agendaItems.sort((a, b) => a.date.compareTo(b.date));
+                        });
+                        Navigator.of(context).pop();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erreur : $result')),
                         );
-                        _agendaItems.sort((a, b) => a.date.compareTo(b.date));
-                      });
-                      Navigator.of(context).pop();
+                      }
                     }
                   },
                 ),
@@ -485,9 +490,29 @@ void initState() {
             );
 
             if (shouldDelete == true) {
-              setState(() {
-                _agendaItems.remove(event);
-              });
+              final eventToDelete = {
+                'title': event.title,
+                'description': event.description,
+                'date':
+                    "${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}/${event.date.year}",
+                'startTime': _formatTimeOfDay(event.startTime),
+                'endTime': _formatTimeOfDay(event.endTime),
+              };
+
+              final result = await _agendaService.delete(
+                _username,
+                eventToDelete,
+              );
+
+              if (result == 'OK') {
+                setState(() {
+                  _agendaItems.remove(event);
+                });
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erreur suppression : $result')),
+                );
+              }
             }
           },
         ),
