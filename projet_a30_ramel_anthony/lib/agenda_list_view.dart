@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -83,11 +82,6 @@ class _AgendaListViewState extends State<AgendaListView> {
         ).showSnackBar(SnackBar(content: Text('Erreur chargement : $e')));
       });
     }
-  }
-
-  TimeOfDay _parseTime(String time) {
-    final parts = time.split(':');
-    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
 
   Color _getRandomColor(int seed) {
