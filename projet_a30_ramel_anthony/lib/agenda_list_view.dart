@@ -288,6 +288,7 @@ class _AgendaListViewState extends State<AgendaListView> {
                             (_selectedStartTime.hour == _selectedEndTime.hour &&
                                 _selectedStartTime.minute <
                                     _selectedEndTime.minute))) {
+                      Navigator.of(context).pop();
                       final newEvent = {
                         'title': _titleController.text,
                         'description': _descController.text,
@@ -315,7 +316,6 @@ class _AgendaListViewState extends State<AgendaListView> {
                           );
                           _agendaItems.sort((a, b) => a.date.compareTo(b.date));
                         });
-                        Navigator.of(context).pop();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Erreur : $result')),
@@ -374,7 +374,7 @@ class _AgendaListViewState extends State<AgendaListView> {
       headerText = "Demain";
     } else {
       try {
-        headerText = DateFormat('EEEE d MMMM', 'fr_FR').format(date);
+        headerText = DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(date);
         headerText = headerText[0].toUpperCase() + headerText.substring(1);
       } catch (_) {
         final weekdays = [
@@ -464,67 +464,203 @@ class _AgendaListViewState extends State<AgendaListView> {
             ),
           ],
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) async {
-            if (value == 'edit') {
-              _showEditEventDialog(event);
-            } else if (value == 'delete') {
-              final shouldDelete = await showDialog<bool>(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text('Supprimer l\'événement ?'),
-                    content: Text(
-                      'Voulez-vous vraiment supprimer "${event.title}" ?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Annuler'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.orangeAccent),
+              onPressed: () {
+                _showEditEventDialog(event);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.redAccent),
+              onPressed: () async {
+                final shouldDelete = await showDialog<bool>(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text('Supprimer l\'événement ?'),
+                      content: Text(
+                        'Voulez-vous vraiment supprimer "${event.title}" ?',
                       ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Supprimer'),
-                      ),
-                    ],
-                  );
-                },
-              );
-
-              if (shouldDelete == true) {
-                final eventToDelete = {
-                  'title': event.title,
-                  'description': event.description,
-                  'date':
-                      "${event.date.day.toString().padLeft(2, '0')}/${event.date.month.toString().padLeft(2, '0')}/${event.date.year}",
-                  'startTime': _formatTimeOfDay(event.startTime),
-                  'endTime': _formatTimeOfDay(event.endTime),
-                };
-
-                final result = await _agendaService.delete(
-                  _username,
-                  eventToDelete,
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Annuler'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Supprimer'),
+                        ),
+                      ],
+                    );
+                  },
                 );
 
-                if (result == 'OK') {
-                  setState(() {
-                    _agendaItems.remove(event);
-                  });
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Erreur suppression : $result')),
+                if (shouldDelete == true) {
+                  final eventToDelete = {
+                    'title': event.title,
+                    'description': event.description,
+                    'date': DateFormat('dd/MM/yyyy').format(event.date),
+                    'startTime': _formatTimeOfDay(event.startTime),
+                    'endTime': _formatTimeOfDay(event.endTime),
+                  };
+
+                  final result = await _agendaService.delete(
+                    _username,
+                    eventToDelete,
                   );
+
+                  if (result == 'OK') {
+                    setState(() {
+                      _agendaItems.remove(event);
+                    });
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Erreur suppression : $result')),
+                    );
+                  }
                 }
-              }
-            }
-          },
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('Modifier')),
-                const PopupMenuItem(value: 'delete', child: Text('Supprimer')),
-              ],
+              },
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  void _showEditEventDialog(AgendaItem event) {
+    final titleController = TextEditingController(text: event.title);
+    final descController = TextEditingController(text: event.description);
+    DateTime selectedDate = event.date;
+    TimeOfDay selectedStartTime = event.startTime;
+    TimeOfDay selectedEndTime = event.endTime;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Modifier l\'événement'),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(labelText: 'Titre'),
+                    ),
+                    TextField(
+                      controller: descController,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Date'),
+                      subtitle: Text(
+                        DateFormat('dd/MM/yyyy').format(selectedDate),
+                      ),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (pickedDate != null) {
+                          setStateDialog(() => selectedDate = pickedDate);
+                        }
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Heure de début'),
+                      subtitle: Text(_formatTimeOfDay(selectedStartTime)),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedStartTime,
+                        );
+                        if (picked != null) {
+                          setStateDialog(() => selectedStartTime = picked);
+                        }
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Heure de fin'),
+                      subtitle: Text(_formatTimeOfDay(selectedEndTime)),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedEndTime,
+                        );
+                        if (picked != null &&
+                            (picked.hour > selectedStartTime.hour ||
+                                (picked.hour == selectedStartTime.hour &&
+                                    picked.minute >
+                                        selectedStartTime.minute))) {
+                          setStateDialog(() => selectedEndTime = picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Annuler'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                ElevatedButton(
+                  child: const Text('Modifier'),
+                  onPressed: () async {
+                    final updatedEvent = {
+                      'title': titleController.text,
+                      'description': descController.text,
+                      'date': DateFormat('dd/MM/yyyy').format(selectedDate),
+                      'startTime': _formatTimeOfDay(selectedStartTime),
+                      'endTime': _formatTimeOfDay(selectedEndTime),
+                    };
+
+                    final oldEvent = {
+                      'title': event.title,
+                      'description': event.description,
+                      'date': DateFormat('dd/MM/yyyy').format(event.date),
+                      'startTime': _formatTimeOfDay(event.startTime),
+                      'endTime': _formatTimeOfDay(event.endTime),
+                    };
+
+                    final result = await _agendaService.updateEvent(
+                      _username,
+                      oldEvent,
+                      updatedEvent,
+                    );
+
+                    if (result == 'OK') {
+                      setState(() {
+                        event.title = titleController.text;
+                        event.description = descController.text;
+                        event.date = selectedDate;
+                        event.startTime = selectedStartTime;
+                        event.endTime = selectedEndTime;
+                        _agendaItems.sort((a, b) => a.date.compareTo(b.date));
+                      });
+                      Navigator.of(context).pop();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Erreur modification : $result'),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -536,11 +672,11 @@ class _AgendaListViewState extends State<AgendaListView> {
 }
 
 class AgendaItem {
-  final String title;
-  final String description;
-  final DateTime date;
-  final TimeOfDay startTime;
-  final TimeOfDay endTime;
+  String title;
+  String description;
+  DateTime date;
+  TimeOfDay startTime;
+  TimeOfDay endTime;
   final Color color;
 
   AgendaItem({
